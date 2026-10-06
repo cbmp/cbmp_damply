@@ -245,7 +245,7 @@ def collect_audits(
 		'meta.DATE',
 		'file_types',
 	]
-	audit_df = audit_df[cols]
+	audit_df = audit_df.reindex(columns=cols)
 
 	# drop duplicates based on all columns except 'file_types'
 	audit_df = audit_df.drop_duplicates(
