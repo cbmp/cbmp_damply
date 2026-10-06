@@ -149,7 +149,7 @@ def full_audit(project_group: str, compute_details: bool, job_time: str) -> None
 
 # Setup some assumptions about project groups and directories
 
-VALID_PROJECT_GROUPS = {'bhklab', 'radiomics'}
+VALID_PROJECT_GROUPS = {'bhklab', 'radiomics', 'cbmp'}
 
 
 def run_full_audit(

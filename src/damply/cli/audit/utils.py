@@ -36,14 +36,15 @@ def get_project_group(source_dir: Union[str, Path]) -> str:
 	if len(parts) < 4 or parts[1] != 'cluster' or parts[2] != 'projects':
 		msg = (
 			'Input directory must start with /cluster/projects/bhklab '
-			'or /cluster/projects/radiomics.'
+			'or /cluster/projects/radiomics'
+			'or /cluster/projects/cbmp'
 		)
 		raise OutsideProjectPathError(msg)
 
 	project_group = parts[3]
-	if project_group not in {'bhklab', 'radiomics'}:
+	if project_group not in {'bhklab', 'radiomics', 'cbmp'}:
 		msg = (
-			f"Invalid project group '{project_group}'. Must be 'bhklab' or 'radiomics'."
+			f"Invalid project group '{project_group}'. Must be 'bhklab' or 'radiomics or cbmp'."
 		)
 		raise InvalidProjectGroupError(msg)
 
