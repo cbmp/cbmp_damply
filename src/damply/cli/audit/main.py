@@ -1,6 +1,10 @@
 import datetime
+import getpass
 import json
+import os
+import subprocess
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -138,13 +142,21 @@ def audit(directory: Path, compute_details: bool) -> None:
 	default='01:00:00',
 	show_default=True,
 )
-def full_audit(project_group: str, compute_details: bool, job_time: str) -> None:
+@click.option(
+	'--max-jobs',
+	'max_jobs',
+	type=click.IntRange(min=1),
+	default=2000,
+	show_default=True,
+	help='Sets maximum number of slurm jobs to submit to cluster to avoid failure due to QOS violations when running audit on many directories',
+)
+def full_audit(project_group: str, compute_details: bool, job_time: str, max_jobs: int,) -> None:
 	"""Run a full audit for the specified project group.
 
 	This will essentially, submit a bunch of sbatch jobs to the cluster
 	for all the directories in the project group.
 	"""
-	run_full_audit(project_group, compute_details=compute_details, job_time=job_time)
+	run_full_audit(project_group, compute_details=compute_details, job_time=job_time, max_jobs=max_jobs,)
 
 
 # Setup some assumptions about project groups and directories
@@ -152,8 +164,10 @@ def full_audit(project_group: str, compute_details: bool, job_time: str) -> None
 VALID_PROJECT_GROUPS = {'bhklab', 'radiomics', 'cbmp'}
 
 
-def run_full_audit(
-	project_group: str, compute_details: bool = False, job_time: str = '01:00:00'
+def run_full_audit(project_group: str,
+	compute_details: bool = False,
+	job_time: str = '01:00:00',
+	max_jobs: int = 2000,
 ) -> None:
 	"""Run a full audit for the specified project group.
 
@@ -198,9 +212,8 @@ def run_full_audit(
 
 	compute_details_arg = '--force-compute-details' if compute_details else ''
 
-	import subprocess
-
 	for directory in directories:
+		wait_for_job_slot(max_jobs)
 		rel_path = get_parents_path(project_group, directory)
 		job_name = rel_path.replace('/', '_').replace(' ', '_')
 		log_dir = log_dir_base / rel_path
@@ -228,8 +241,34 @@ def run_full_audit(
 			continue
 
 
+def wait_for_job_slot(max_jobs: int) -> None:
+	username = getpass.getuser()
+	current_job_id = os.environ.get('SLURM_JOB_ID')
+
+	while True:
+		result = subprocess.run(
+			['squeue', '--noheader', '--user', username, '--format=%i'],
+			check=True,
+			capture_output=True,
+			text=True,
+		)
+		job_ids = {
+			job_id.strip()
+			for job_id in result.stdout.splitlines()
+			if job_id.strip() and job_id.strip() != current_job_id
+		}
+		if len(job_ids) < max_jobs:
+			return
+
+		logger.info(
+			f'{len(job_ids)} of {max_jobs} allowed jobs are pending or '
+			'running; checking again in 30 seconds.'
+		)
+		time.sleep(30)
+
+
 def get_directories(root: Path) -> list[Path]:
-	# Return all directories within the project group
+	# Audit all directories within the project group
 	dirs = [
 		d
 		for d in root.rglob('*')
