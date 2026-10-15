@@ -229,60 +229,14 @@ def run_full_audit(
 
 
 def get_directories(root: Path) -> list[Path]:
-	from itertools import product
-
-	############################################################################
-	# bhklab is simple:
-	############################################################################
-	if root.name == 'bhklab':
-		# get the first level of directories in the root
-		dirs = [d for d in root.glob('*/*') if d.is_dir()]
-		# sort the directories by name
-		dirs.sort(key=lambda x: str(x))
-		logger.info(f'Found {len(dirs)} directories in {root}')
-		return dirs
-
-	############################################################################
-	# radiomics is more complex:
-	############################################################################
-	# get the first level of directories in the root
-	parents = ['InternalDatasets', 'PublicDatasets']
-
-	one_level_dirs = [d for d in root.iterdir() if d.is_dir() and d.name not in parents]
-
-	# we will do more complex matching for internal and public datasets
-	mids = ['srcdata', 'procdata']
-	disease_sites = [
-		'Abdomen',
-		'Brain',
-		'Breast',
-		'HeadNeck',
-		'Lung',
-		'MultiSite',
-		'Pelvis',
-		'PhantomData',
+	# Return all directories within the project group
+	dirs = [
+		d
+		for d in root.rglob('*')
+		if d.is_dir()
+		and not d.is_symlink()
+		and d.relative_to(root).parts[:2] != ('admin', 'audit')
 	]
-	matches = [
-		root / parent / mid / ds
-		for parent, mid, ds in product(parents, mids, disease_sites)
-		if (root / parent / mid / ds).is_dir()
-		and not (root / parent / mid / ds).is_symlink()
-	]
-
-	# now get one level directories that are not symlinks
-	# matches = [d for d in one_level_dirs.iterdir() if not d.is_symlink()]
-	for subdir in [*one_level_dirs, *matches]:
-		if subdir.is_symlink():
-			logger.warning(f'Skipping symlinked directory: {subdir}')
-			continue
-		try:
-			matches += [
-				d for d in subdir.iterdir() if d.is_dir() and not d.is_symlink()
-			]
-		except PermissionError:
-			logger.warning(f'Permission denied for directory: {subdir}. Skipping.')
-			continue
-
-	# sort the matches by name
-	matches.sort(key=lambda x: str(x))
-	return matches
+	dirs.sort(key=lambda x: str(x))
+	logger.info(f'Found {len(dirs)} directories in {root}')
+	return dirs
