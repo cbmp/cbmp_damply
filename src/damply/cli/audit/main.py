@@ -15,7 +15,6 @@ from damply.logging_config import logger
 from damply.project import DirectoryAudit
 
 from .utils import (
-	InvalidProjectGroupError,
 	OutsideProjectPathError,
 	get_parents_path,
 	get_project_group,
