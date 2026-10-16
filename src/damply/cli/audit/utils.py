@@ -2,10 +2,6 @@ from pathlib import Path
 from typing import Union
 
 
-class InvalidProjectGroupError(ValueError):
-	"""Raised when the project group is not in VALID_PROJECT_GROUPS."""
-
-
 class OutsideProjectPathError(ValueError):
 	"""Raised when the source directory is not within the expected project base path."""
 
@@ -20,7 +16,6 @@ def get_project_group(source_dir: Union[str, Path]) -> str:
 	    The project group name.
 
 	Raises:
-	    InvalidProjectGroupError: If the group is not in VALID_PROJECT_GROUPS.
 	    OutsideProjectPathError: If the path doesn't start with /cluster/projects.
 
 	Examples:
@@ -39,13 +34,6 @@ def get_project_group(source_dir: Union[str, Path]) -> str:
 		)
 		raise OutsideProjectPathError(msg)
 
-	project_group = parts[3]
-	if project_group not in {'bhklab', 'radiomics', 'cbmp'}:
-		msg = (
-			f"Invalid project group '{project_group}'."
-		)
-		raise InvalidProjectGroupError(msg)
-
 	return project_group
 
 
@@ -53,7 +41,7 @@ def get_parents_path(project_group: str, source_dir: Union[str, Path]) -> str:
 	"""Compute the relative path from the project root to the source directory.
 
 	Args:
-	    project_group: any group in VALID_PROJECT_GROUPS.
+	    project_group: any project group name.
 	    source_dir: Full path to the source directory.
 
 	Returns:

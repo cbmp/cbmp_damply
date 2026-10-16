@@ -161,8 +161,6 @@ def full_audit(project_group: str, compute_details: bool, job_time: str, max_job
 
 # Setup some assumptions about project groups and directories
 
-VALID_PROJECT_GROUPS = {'bhklab', 'radiomics', 'cbmp'}
-
 
 def run_full_audit(project_group: str,
 	compute_details: bool = False,
@@ -176,10 +174,6 @@ def run_full_audit(project_group: str,
 	This will essentially, submit a bunch of sbatch jobs to the cluster
 	for all the directories in the project group.
 	"""
-
-	if project_group not in VALID_PROJECT_GROUPS:
-		msg = f'Invalid project group: {project_group}. Valid groups are: {", ".join(VALID_PROJECT_GROUPS)}'
-		raise InvalidProjectGroupError(msg)
 
 	# Define the base directory for the project group
 	root = Path(f'/cluster/projects/{project_group}')
