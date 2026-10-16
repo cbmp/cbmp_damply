@@ -3,7 +3,7 @@ from typing import Union
 
 
 class InvalidProjectGroupError(ValueError):
-	"""Raised when the project group is not 'bhklab' or 'radiomics'."""
+	"""Raised when the project group is not in VALID_PROJECT_GROUPS."""
 
 
 class OutsideProjectPathError(ValueError):
@@ -17,10 +17,10 @@ def get_project_group(source_dir: Union[str, Path]) -> str:
 	    source_dir: Path to the source directory.
 
 	Returns:
-	    The project group name ('bhklab' or 'radiomics').
+	    The project group name.
 
 	Raises:
-	    InvalidProjectGroupError: If the group is not bhklab or radiomics.
+	    InvalidProjectGroupError: If the group is not in VALID_PROJECT_GROUPS.
 	    OutsideProjectPathError: If the path doesn't start with /cluster/projects.
 
 	Examples:
@@ -35,16 +35,14 @@ def get_project_group(source_dir: Union[str, Path]) -> str:
 
 	if len(parts) < 4 or parts[1] != 'cluster' or parts[2] != 'projects':
 		msg = (
-			'Input directory must start with /cluster/projects/bhklab '
-			'or /cluster/projects/radiomics'
-			'or /cluster/projects/cbmp'
+			'Input directory must start with /cluster/projects/VALID_PROJECT_GROUP '
 		)
 		raise OutsideProjectPathError(msg)
 
 	project_group = parts[3]
 	if project_group not in {'bhklab', 'radiomics', 'cbmp'}:
 		msg = (
-			f"Invalid project group '{project_group}'. Must be 'bhklab' or 'radiomics or cbmp'."
+			f"Invalid project group '{project_group}'."
 		)
 		raise InvalidProjectGroupError(msg)
 
@@ -55,7 +53,7 @@ def get_parents_path(project_group: str, source_dir: Union[str, Path]) -> str:
 	"""Compute the relative path from the project root to the source directory.
 
 	Args:
-	    project_group: 'bhklab' or 'radiomics'.
+	    project_group: any group in VALID_PROJECT_GROUPS.
 	    source_dir: Full path to the source directory.
 
 	Returns:
