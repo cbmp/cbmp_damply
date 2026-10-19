@@ -18,9 +18,13 @@ To run a full data audit on a group folder, perform the following steps:
 ```bash
 salloc -c 1 --mem=250M --time 2:00:0
 ```
-**Step 2:** Run `full-audit` to perform an audit on all folders the directory, each submitted as an `sbatch` job. `full-audit` will limit the number of pending+running jobs to 2000 by default to avoid QOS limits on H4H. Different limits can be specified with `--max-jobs`. The results will be stored in your group folder under `<group_folder>/admin/audit...`. This can take a long time to run depending on how many directories there are in the group folder, so adjust the time of the `salloc` session accordingly. Note that an audit can only be performed on folders you have read permissions for.
+**Step 2:** Run `full-audit` to perform an audit on all folders the directory, each submitted as an `sbatch` job. `full-audit` will limit the number of pending+running jobs to 2000 by default to avoid QOS limits on H4H. Different limits can be specified with `--max-jobs`. The results will be stored in your group folder under `<group_folder>/admin/audit/logs/<date>/...`. This can take a long time to run depending on how many directories there are in the group folder, so adjust the time of the `salloc` session accordingly. Note that an audit can only be performed on folders you have read permissions for.
 ```bash
 damply full-audit <group_folder>
+```
+Tip: Find folders you do not have read access to within the group directory being audited using the following command. The contents of folders listed here will not be audited.
+```bash
+find <group_folder> -type d ! -readable
 ```
 
 **Step 3:** Run `collect-audits` to collect the audit results. The results will be stored under `<group_folder>/admin/audit/results/<date>/...`. A `<group_folder>-audit_summary.csv` will be generated summarizing the owner, size, last modified date and file extensions for all audited directories in the group folder.
