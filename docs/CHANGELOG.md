@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## CBMP DAmPly Fork (2026-10-15)
+Changed function of `full-audit` to audit all folders within a group directory. Group directories with a large number of files fail auditing because the number of submitted `sbatch` jobs exceeds the QOS limits on H4H. `--max-jobs` has been added to limit the number (default: 2000) of running+pending jobs submitted to the cluster. Removed `valid_project_groups` requirement so that any group name under `cluster/projects/...` on H4H can be audited, however the audit will only run on group folders you have read permissions for.
+
+
+## CBMP DAmPly Fork (2026-10-06)
+Added `cbmp` to `valid_project_groups` to perform `full-audit` on this group folder. Removed requirement for directories being audited to contain a `README` file containing directory metadata information: `#OWNER:`, `#EMAIL:`, `#DATE:`, `#DESC:`. These metadata fields will be left empty in the audit output summary if a `README` containing this information is not found.
 
 ## v0.26.1 (2026-03-16)
 

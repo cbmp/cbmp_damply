@@ -1,27 +1,37 @@
-#OWNER: Jermiah
-
-#DATE: 2025-05-20
-
-#DESC: Data Management Plan made simple
-
-
-# damply
-
-[![codecov](https://codecov.io/gh/bhklab/damply/graph/badge.svg?token=tCcajRIGz9)](https://codecov.io/gh/bhklab/damply)
-[![CI-CD](https://github.com/bhklab/damply/actions/workflows/main.yaml/badge.svg)](https://github.com/bhklab/damply/actions/workflows/main.yaml)
-[![CodeFactor](https://www.codefactor.io/repository/github/bhklab/damply/badge)](https://www.codefactor.io/repository/github/bhklab/damply)
-
-[![pixi-badge](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square)](https://github.com/prefix-dev/pixi)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&style=flat-square)](https://github.com/pre-commit/pre-commit)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square)](https://github.com/astral-sh/ruff)
-[![Built with Material for MkDocs](https://img.shields.io/badge/mkdocs--material-gray?logo=materialformkdocs&style=flat-square)](https://github.com/squidfunk/mkdocs-material)
-
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/damply)](https://pypi.org/project/damply/)
-[![PyPI - Version](https://img.shields.io/pypi/v/damply)](https://pypi.org/project/damply/)
-[![PyPI - Format](https://img.shields.io/pypi/format/damply)](https://pypi.org/project/damply/)
-[![Downloads](https://static.pepy.tech/badge/damply)](https://pepy.tech/project/damply)
+# CBMP_DaMPly
+This project is a fork of bhklab/DaMPly (Data Management Plan)
 
 ## Overview
+DaMPly (Data Management Plan) is a Python module designed to streamline the process of managing and packaging directories. This fork has been modified to audit package directories on H4H outside of BHK Lab. See the [changelog](https://github.com/cbmp/cbmp_damply/blob/main/docs/CHANGELOG.md) for more details about these modifications.
 
+## Install Damply
+Connect to build node on H4H and install:
+```bash
+salloc -p build -c 1 --mem=250M -t 0:10:0
+uv tool install git+https://github.com/cbmp/cbmp_damply.git
+```
 
-DaMPly (Data Management Plan) is a Python module designed to streamline the process of managing and packaging directories.
+## Data Audting
+To run a full data audit on a group folder, perform the following steps:
+
+**Step 1:** Connect to the compute node.
+```bash
+salloc -c 1 --mem=250M --time 2:00:0
+```
+**Step 2:** Run `full-audit` to perform an audit on all folders the directory, each submitted as an `sbatch` job. `full-audit` will limit the number of pending+running jobs to 2000 by default to avoid QOS limits on H4H. Different limits can be specified with `--max-jobs`. The results will be stored in your group folder under `<group_folder>/admin/audit...`. This can take a long time to run depending on how many directories there are in the group folder, so adjust the time of the `salloc` session accordingly. Note that an audit can only be performed on folders you have read permissions for.
+```bash
+damply full-audit <group_folder>
+```
+
+**Step 3:** Run `collect-audits` to collect the audit results. The results will be stored under `<group_folder>/admin/audit/results/<date>/...`. A `<group_folder>-audit_summary.csv` will be generated summarizing the owner, size, last modified date and file extensions for all audited directories in the group folder.
+```bash
+damply collect-audits <group_folder>
+```
+
+**Step 4:** Run `plot` to create a sankey plot showing a graphical breakdown of data usage in the audited directory.
+```bash
+damply plot <path>/<to>/admin/audit/results/<date>/<group_folder>-audit_summary.csv
+```
+
+## Standardzing Access to Project Directories
+DAmPly also has functions to to standardize file path naming systems avoid the issues that come with differences in directory naming systems and project file structures between users running a script. These functions have not been modified in this DAmPly fork. More details about these functions can be found at bhklab/damply: https://bhklab.github.io/damply/dmpdirs/
