@@ -14,15 +14,28 @@ uv tool install git+https://github.com/cbmp/cbmp_damply.git
 ## Data Audting
 To run a full data audit on a group folder, perform the following steps:
 
-**Step 1:** Connect to the compute node.
+**Step 1:** Connect to the compute node (unless submitting the audit job via `sbatch`, see below):
 ```bash
-salloc -c 1 --mem=250M --time 2:00:0
+salloc -c 1 --mem=5G --time 5:00:0
 ```
-**Step 2:** Run `full-audit` to perform an audit on all folders the directory, each submitted as an `sbatch` job. `full-audit` will limit the number of pending+running jobs to 2000 by default to avoid QOS limits on H4H. Different limits can be specified with `--max-jobs`. The results will be stored in your group folder under `<group_folder>/admin/audit/logs/<date>/...`. This can take a long time to run depending on how many directories there are in the group folder, so adjust the time of the `salloc` session accordingly. Note that an audit can only be performed on folders you have read permissions for.
+**Step 2:** Run `full-audit`. Runing this will first build a list of all directories to audit by scanning through all contents of the group folder. Group folders with a large number of directories will require higher `--mem` and `--time` to run to completion. Once a list of directories is built, each item will be submitted for audit as an `sbatch` job. By default, `full-audit` will limit the number of pending+running jobs to 2000 to avoid QOS limits on H4H. Different limits can be specified with `--max-jobs`. The results will be stored in your group folder under `<group_folder>/admin/audit/logs/<date>/...`. Audit jobs will not be submitted for directories within `<group_folder>/admin/audit...`.
 ```bash
 damply full-audit <group_folder>
 ```
-Tip: Find folders you do not have read access to within the group directory being audited using the following command. The contents of folders listed here will not be audited.
+Alternatively run `full-audit` via `sbatch`. See sample script below (recommended for group directories with thousands of files):
+```bash
+#!/bin/bash
+
+#SBATCH -t 5:00:00
+#SBATCH --mem=5G
+#SBATCH -J <group_folder>_audit
+#SBATCH -p all
+#SBATCH -c 1
+#SBATCH -o <group_folder>_audit_<date>.out
+
+damply full-audit <group_folder>
+```
+Note that audits can only be performed on folders you have read permissions for. You can find folders you do not have read access to using the following command. The contents of folders listed here will not be audited.
 ```bash
 find <group_folder> -type d ! -readable
 ```
