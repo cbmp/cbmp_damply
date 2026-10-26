@@ -28,6 +28,7 @@ def get_project_group(source_dir: Union[str, Path]) -> str:
 	source_path = Path(source_dir).resolve()
 	parts = source_path.parts
 
+	project_group = parts[3]
 	if len(parts) < 4 or parts[1] != 'cluster' or parts[2] != 'projects':
 		msg = (
 			'Input directory must start with /cluster/projects/VALID_PROJECT_GROUP '
