@@ -261,21 +261,19 @@ def wait_for_job_slot(max_jobs: int) -> None:
 
 
 def get_directories(root: Path) -> list[Path]:
-	# Audit all directories within the project group
-	dirs = []
-	audit_dir = root/ 'admin' / 'audit'
+    dirs = []
+    audit_dir = root / 'admin' / 'audit'
 
-	 for current, child_dirs, _ in os.walk(root, topdown=True):
+    for current, child_dirs, _ in os.walk(root, topdown=True):
         current_path = Path(current)
-
-        # Prevent os.walk from descending into admin/audit.
         child_dirs[:] = [
-            name for name in child_dirs
+            name
+            for name in child_dirs
             if current_path / name != audit_dir
             and not (current_path / name).is_symlink()
         ]
         dirs.extend(current_path / name for name in child_dirs)
-	
-	dirs.sort(key=lambda path: str(path))
-	logger.info(f'Found {len(dirs)} directories in {root}')
-	return dirs
+
+    dirs.sort(key=lambda path: str(path))
+    logger.info(f'Found {len(dirs)} directories in {root}')
+    return dirs
