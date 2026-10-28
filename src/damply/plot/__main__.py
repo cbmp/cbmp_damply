@@ -28,7 +28,34 @@ from damply.logging_config import logger
 	' i.e /cluster/project/bhklab/rawdata/CCLE/rnaseq is depth 6',
 	default=0,
 )
-def plot(file_path: Path, threshold_gb: int, max_depth_from_root: int) -> None:  # noqa: PLR0915
+@click.option(
+	'--height',
+	type=int,
+	default=None,
+	help='Height of the plot in pixels. Height will be automatically determined if not specified.',
+)
+@click.option(
+	'--node-pad',
+	type=int,
+	default=15,
+	help='Vertical distance between nodes, in pixels.'
+	show_default=TRUE,
+)
+@click.option(
+	'--label-size',
+	type=int,
+	default=None,
+	help='Font size of the labels. Font size will be automatically determined if not specified.',
+)
+
+def plot( # noqa: PLR0915
+	file_path: Path, 
+	threshold_gb: int, 
+	max_depth_from_root: int,
+	height: int,
+	node_pad: int,
+	label_size: int,
+) -> None:
 	"""
 	Damply plot from collect-audit csv file.
 	FILE_PATH: Path to the CSV file containing directory information.
@@ -178,7 +205,7 @@ def plot(file_path: Path, threshold_gb: int, max_depth_from_root: int) -> None: 
 		go.Sankey(
 			node=dict(
 				label=audit_summary['label'].tolist(),
-				pad=15,
+				pad=node_pad,
 				thickness=20,
 				color=audit_summary['color'].tolist(),  # Add colors
 			),
@@ -193,6 +220,11 @@ def plot(file_path: Path, threshold_gb: int, max_depth_from_root: int) -> None: 
 		)
 	)
 
+	if label_size is not None:
+		fig.update_layout(font_size=label_size)
+	if height is not None:
+		fig.update_layout(height=height)
+	
 	# Save figure
 	output_path = file_path.with_suffix('.sankey.html')
 	fig.write_html(output_path)
