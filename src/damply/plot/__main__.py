@@ -38,8 +38,8 @@ from damply.logging_config import logger
 	'--node-pad',
 	type=int,
 	default=15,
-	help='Vertical distance between nodes, in pixels.'
-	show_default=TRUE,
+	help='Vertical distance between nodes, in pixels.',
+	show_default=True,
 )
 @click.option(
 	'--label-size',
