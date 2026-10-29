@@ -149,13 +149,21 @@ def audit(directory: Path, compute_details: bool) -> None:
 	show_default=True,
 	help='Sets maximum number of slurm jobs to submit to cluster to avoid failure due to QOS violations when running audit on many directories',
 )
-def full_audit(project_group: str, compute_details: bool, job_time: str, max_jobs: int,) -> None:
+@click.option(
+	'--sbatch-memory',
+	'-m',
+	'job_memory',
+	help='Memory limit for each sbatch job (default: 4G)',
+	default='4G',
+	show_default=True,
+)
+def full_audit(project_group: str, compute_details: bool, job_time: str, max_jobs: int, job_memory:str) -> None:
 	"""Run a full audit for the specified project group.
 
 	This will essentially, submit a bunch of sbatch jobs to the cluster
 	for all the directories in the project group.
 	"""
-	run_full_audit(project_group, compute_details=compute_details, job_time=job_time, max_jobs=max_jobs,)
+	run_full_audit(project_group, compute_details=compute_details, job_time=job_time, max_jobs=max_jobs, job_memory=job_memory)
 
 
 # Setup some assumptions about project groups and directories
@@ -165,6 +173,7 @@ def run_full_audit(project_group: str,
 	compute_details: bool = False,
 	job_time: str = '01:00:00',
 	max_jobs: int = 2000,
+	job_memory: str = '4G',
 ) -> None:
 	"""Run a full audit for the specified project group.
 
@@ -220,7 +229,7 @@ def run_full_audit(project_group: str,
 			'--time',
 			job_time,
 			'--mem',
-			'4G',
+			job_memory,
 			'--wrap',
 			f'DAMPLY_LOG_LEVEL=DEBUG damply audit {directory} {compute_details_arg}',
 		]
