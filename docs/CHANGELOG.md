@@ -1,4 +1,6 @@
 # CHANGELOG
+## CBMP DAmPly Fork (2026-10-28)
+Updated `plot` function to include options to change plot aesthetics: `--height`, `--node-pad`, `--label-size`. These options improve the readability of plots built on very large and deeply nested directories. Updated `full-audit` function to include the ability to change the memory limits of submitted `sbatch` jobs via `--sbatch-memory`. Setting a higher memory limit prevents the individual audit jobs failing on very large, nested directories. 
 
 ## CBMP DAmPly Fork (2026-10-15)
 Changed function of `full-audit` to audit all folders within a group directory. Group directories with a large number of files fail auditing because the number of submitted `sbatch` jobs exceeds the QOS limits on H4H. `--max-jobs` has been added to limit the number (default: 2000) of running+pending jobs submitted to the cluster. Removed `valid_project_groups` requirement so that any group name under `cluster/projects/...` on H4H can be audited, however the audit will only run on group folders you have read permissions for.
