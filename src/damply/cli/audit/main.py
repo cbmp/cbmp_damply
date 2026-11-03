@@ -81,6 +81,7 @@ def audit(directory: Path, compute_details: bool) -> None:
 	}
 
 	def safe_audit(path: Path) -> dict:
+		audit_obj = None
 		try:
 			logger.info(f'Auditing: {path}')
 			audit_obj = DirectoryAudit.from_path(path)
@@ -95,14 +96,24 @@ def audit(directory: Path, compute_details: bool) -> None:
 			stack = traceback.format_exc(limit=5)  # limit frames if needed
 			logger.exception(f'Failed audit: {path}')
 
-			return {
+			result = {
 				'status': 'error',
 				'error': f'{etype}: {emsg}',
 				'traceback': stack,
 			}
+			result['data'] = (
+				audit_obj.to_dict() if audit_obj is not None else {'path': str(path)}
+			)
+			return result
 
 	# Audit subdirectories
-	for subdir in sorted(directory.iterdir()):
+	try:
+		subdirectories = sorted(directory.iterdir())
+	except OSError as e:
+		logger.warning(f'Unable to list subdirectories of {directory}: {e}')
+		subdirectories = []
+
+	for subdir in subdirectories:
 		if subdir.is_dir():
 			results['directories'][subdir.name] = safe_audit(subdir)
 
@@ -273,7 +284,10 @@ def get_directories(root: Path) -> list[Path]:
     dirs = []
     audit_dir = root / 'admin' / 'audit'
 
-    for current, child_dirs, _ in os.walk(root, topdown=True):
+    def log_walk_error(error: OSError) -> None:
+        logger.warning(f'Unable to scan directory {error.filename}: {error}')
+
+    for current, child_dirs, _ in os.walk(root, topdown=True, onerror=log_walk_error):
         current_path = Path(current)
         child_dirs[:] = [
             name

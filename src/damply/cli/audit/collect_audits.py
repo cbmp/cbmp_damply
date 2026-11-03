@@ -57,18 +57,19 @@ class DirectoryNode:
 	parent_path: str
 	parent: str
 	name: str
-	size: int
-	file_count: int
-	file_types: list[str]
+	size: int | None
+	file_count: int | None
+	file_types: list[str] | None
 	owner: str
 	group: str
 	full_name: str
 	permissions: str
-	last_modified: str
-	last_changed: str
+	last_modified: str | None
+	last_changed: str | None
 	# last_computed: str
 	readme_path: str | None
 	metadata: dict[str, str]
+	audit_status: str = 'ok'
 	depth: int = field(default=0, init=False)
 	children: list[DirectoryNode] = field(default_factory=list)
 
@@ -78,7 +79,7 @@ class DirectoryNode:
 		self.depth = len(Path(self.path).relative_to(root).parts)
 
 	@classmethod
-	def from_dict(cls, data: dict) -> DirectoryNode:
+	def from_dict(cls, data: dict, status: str = 'ok') -> DirectoryNode:
 		"""Create a DirectoryNode from a dictionary."""
 		# parent should be calculated as relative to after the 3rd slash
 		try:
@@ -88,17 +89,18 @@ class DirectoryNode:
 				parent_path=p.parent.as_posix(),
 				parent=p.parent.relative_to(Path(*p.parts[0:4])).as_posix(),
 				name=p.name,
-				size=data['size'],
-				file_count=data['file_count'],
-				file_types=data['file_types'],
-				owner=data['owner'],
-				group=data['group'],
-				full_name=data['full_name'],
-				permissions=data['permissions'],
-				last_modified=data['last_modified'],
-				last_changed=data['last_changed'],
+				size=data.get('size'),
+				file_count=data.get('file_count'),
+				file_types=data.get('file_types'),
+				owner=data.get('owner', 'Unknown'),
+				group=data.get('group', 'Unknown'),
+				full_name=data.get('full_name', 'Unknown'),
+				permissions=data.get('permissions', 'Unknown'),
+				last_modified=data.get('last_modified'),
+				last_changed=data.get('last_changed'),
 				readme_path=data.get('readme_path'),
 				metadata=data.get('metadata', {}),
+				audit_status=status,
 			)
 		except KeyError as e:
 			exising_keys = ', '.join(data.keys())
@@ -107,16 +109,21 @@ class DirectoryNode:
 
 
 def build_tree(entry: dict[str, object], keep_children: bool) -> DirectoryNode:
-	root_data = entry['source_directory']['data']
-	root_node = DirectoryNode.from_dict(root_data)
+	source = entry.get('source_directory', {})
+	root_data = source.get('data')
+	if not root_data or 'path' not in root_data:
+		raise ValueError('Audit entry has no source directory path.')
+	root_node = DirectoryNode.from_dict(root_data, status=source.get('status', 'error'))
 	if not keep_children:
 		# if source_only is True, we only want the root node
 		return root_node
 
 	for dir_entry in entry.get('directories', {}).values():
-		if dir_entry['status'] == 'ok':
-			child_data = dir_entry['data']
-			child_node = DirectoryNode.from_dict(child_data)
+		child_data = dir_entry.get('data')
+		if child_data and 'path' in child_data:
+			child_node = DirectoryNode.from_dict(
+				child_data, status=dir_entry.get('status', 'error')
+			)
 			root_node.children.append(child_node)
 
 	return root_node
@@ -196,7 +203,7 @@ def collect_audits(
 		try:
 			entry = json.loads(path.read_text())
 			# Skip if source_directory has an error
-			if entry.get('source_directory', {}).get('status') != 'ok':
+			if not entry.get('source_directory', {}).get('data', {}).get('path'):
 				skipped.append(path)
 				continue
 			tree = build_tree(entry, keep_children=keep_children)
@@ -220,7 +227,9 @@ def collect_audits(
 	# add column for GB size from "size" column
 	if 'size' in audit_df.columns:
 		# bytesize .GB helper function to convert bytes to GB
-		audit_df['size_gb'] = audit_df['size'].apply(lambda x: f'{ByteSize(x).GB:.5f}')
+		audit_df['size_gb'] = audit_df['size'].apply(
+			lambda x: f'{ByteSize(x).GB:.5f}' if pd.notna(x) else None
+		)
 
 	# reorder cols this order for better readability
 	cols = [
@@ -236,6 +245,7 @@ def collect_audits(
 		'group',
 		'full_name',
 		'permissions',
+		'audit_status',
 		'last_modified',
 		'last_changed',
 		'readme_path',

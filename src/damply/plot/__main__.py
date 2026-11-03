@@ -197,7 +197,7 @@ def plot( # noqa: PLR0915
 		sources.append(path_to_index[row.parent_path])
 		targets.append(path_to_index[row.path])
 		values.append(
-			row.size_gb or 0.1
+			row.size_gb if pd.notna(row.size_gb) and row.size_gb > 0 else 0.1
 		)  # Fallback to 0.1 to keep zero-size links visible
 
 	# Create Sankey figure
@@ -313,7 +313,9 @@ def load_and_filter_audit(
 
 	# Filter out rows with size_gb less than threshold
 	audit_summary = audit_summary[
-		audit_summary['size'].apply(lambda x: ByteSize(x).GB) >= threshold_gb
+		audit_summary['size'].apply(
+			lambda x: pd.isna(x) or ByteSize(x).GB >= threshold_gb
+		)
 	]
 
 	logger.info(
