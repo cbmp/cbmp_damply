@@ -18,6 +18,24 @@ __all__ = [
 
 
 def get_directory_size(directory: Path, show_progress: bool = True) -> ByteSize:
+	def calculate_size() -> ByteSize:
+		result = subprocess.run(
+			['du', '-s', '-B 1', str(directory)],
+			stdout=subprocess.PIPE,
+			stderr=subprocess.DEVNULL,
+			text=True,
+			check=False,
+		)
+		try:
+			return ByteSize(int(result.stdout.split()[0]))
+		except (IndexError, ValueError) as e:
+			if result.returncode:
+				raise subprocess.CalledProcessError(
+					result.returncode, result.args, output=result.stdout
+				) from e
+			msg = f'Unable to parse du output for {directory}: {result.stdout!r}'
+			raise ValueError(msg) from e
+
 	if show_progress:
 		with Progress(
 			SpinnerColumn(),
@@ -27,23 +45,12 @@ def get_directory_size(directory: Path, show_progress: bool = True) -> ByteSize:
 			task = progress.add_task(
 				f'Calculating size of {str(directory.absolute())}...', total=None
 			)
-			result = subprocess.run(
-				['du', '-s', '-B 1', str(directory)],
-				capture_output=True,
-				text=True,
-				check=True,
-			)
+			size = calculate_size()
 			progress.update(task, completed=True)
 	else:
-		result = subprocess.run(
-			['du', '-s', '-B 1', str(directory)],
-			capture_output=True,
-			text=True,
-			check=True,
-		)
+		size = calculate_size()
 
-	size_ = ByteSize(int(result.stdout.split()[0]))
-	return size_
+	return size
 
 
 def count_files(directory: Path, show_progress: bool = True) -> int:
