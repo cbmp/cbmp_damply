@@ -5,7 +5,7 @@ This project is a fork of bhklab/DaMPly (Data Management Plan)
 DaMPly (Data Management Plan) is a Python module designed to streamline the process of managing and packaging directories. This fork has been modified to audit any group directories on H4H. See the [changelog](https://github.com/cbmp/cbmp_damply/blob/main/docs/CHANGELOG.md) for more details about these modifications.
 
 ## Installing DaMPly
-Connect to build node on H4H and install:
+Connect to the build node on H4H and install:
 ```bash
 salloc -p build -c 1 --mem=250M -t 0:10:0
 uv tool install git+https://github.com/cbmp/cbmp_damply.git
@@ -35,26 +35,23 @@ Alternatively run `full-audit` via `sbatch` (recommended for large group directo
 
 damply full-audit <group_folder>
 ```
-**Tips:**
-Individual directories may fail to be audited due to sbatch time limits, sbatch memory limits and lack of read permissions. Once `full-audit` is completed, directories that failed to be audited due to one of the above reasons can be identified by running:
-```bash
-sacct -u "$USER" --starttime=<audityear-month-day> --format=JobID,JobName%-80,State,Elapsed,Timelimit | awk 'NR == 1 || $3 ~ /^TIMEOUT/'
-sacct -u "$USER" --starttime=<audityear-month-day> --format=JobID,JobName%-80,State,Elapsed,Timelimit | awk 'NR == 1 || $3 ~ /^FAILED/'
-```
-Paths to directories you do not have read permissions for (and which will not be included in the audit) can be displayed by running:
+*Tips:*
+Individual directories may fail to be audited due to sbatch time limits, sbatch memory limits and lack of read permissions. Paths to directories you do not have read permissions for can be displayed by running the command below:
 ```bash
 find <group_folder> -type d ! -readable
-```
+``` 
 
-
-**Step 3:** Run `collect-audits` to collect the audit results. The results will be stored under `<group_folder>/admin/audit/results/<date>/...`. A `<group_folder>-audit_summary.csv` will be generated summarizing the owner, size, last modified date and file extensions for all audited directories in the group folder. This does not require a lot of time or memory to run.
+**Step 3:** Run `collect-audits` to collect the audit results. The results will be stored under `<group_folder>/admin/audit/results/<date>/...`. A `<group_folder>-audit_summary.csv` will be generated summarizing the owner, size, last modified date and file extensions for all audited directories in the group folder. The column `audit_status` will print `error` if the directory failed to be audited for one of the reasons above. This does not require a lot of time or memory to run.
 ```bash
 damply collect-audits <group_folder>
 ```
-
-**Step 4:** Run `plot` to create a sankey plot showing a graphical breakdown of data usage in the audited directory. Plot aesthetics can be changed by supplying `--height`, `--node-pad`, `--label-size` to improve readability. The directories plotted can by filtered through `--threshold_gb` and `--max-depth-from-root`.
+**Step 4:** Run `plot` to create a sankey plot showing a graphical breakdown of data usage in the audited directory. Plot aesthetics can be changed by supplying `--height`, `--node-pad` and `--label-size` to improve readability. The directories plotted can by filtered with `--threshold_gb` and `--max-depth-from-root`.
 ```bash
 damply plot <path>/<to>/admin/audit/results/<date>/<group_folder>-audit_summary.csv
+```
+*Note:* If you have directories in your audit summary that failed to be audited (display `error` in their `audit_status` column), they may have no values in their `size`, `size_gb` and/or `file_count` columns. To avoid an error with `damply plot`, fill these empty cells with `0` before running. This can be done using the command below
+```bash
+awk -F, 'BEGIN {OFS=","} {for (i=6; i<=8; i++) if ($i== "") $i = 0; print}' <group_folder>-audit_summary.csv > <group-folder>-audit_summary_noempty.csv
 ```
 
 ## Standardzing Access to Project Directories

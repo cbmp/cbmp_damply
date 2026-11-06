@@ -1,4 +1,6 @@
 # CHANGELOG
+## CBMP DAmPly Fork (2026-11-05)
+Changed function of `full-audit` to flag any directories which failed to be audited. These directories are now kept in the audit summarty output file and can be identified from the `audit_status` column. Also changed the `get_directory_size` function called by `full-audit`. This change discards any permission errors raised when running `du` on direcories containing sub-directories the user does not have access to. This now allows `full-audit` to return a size value for the parent directory which is a sum of its sub-directories that were able to be traversed during the audit.
 ## CBMP DAmPly Fork (2026-10-28)
 Updated `plot` function to include options to change plot aesthetics: `--height`, `--node-pad`, `--label-size`. These options improve the readability of plots built on very large and deeply nested directories. Updated `full-audit` function to include the ability to change the memory limits of submitted `sbatch` jobs via `--sbatch-memory`. Setting a higher memory limit prevents the individual audit jobs failing on very large, nested directories. 
 
