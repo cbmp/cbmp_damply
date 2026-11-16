@@ -248,9 +248,10 @@ def batch_audit(
 	audit_root = root / 'admin' / 'audit'
 	manifest_dir = audit_root / 'jobs' / date / run_id
 	log_dir = audit_root / 'logs' / date / 'batch-audit' / run_id
-	results_root = audit_root / 'results' / date
+	batch_results_dir = audit_root / 'results' / date / 'batch-audit' / run_id
 	manifest_dir.mkdir(parents=True, exist_ok=True)
 	log_dir.mkdir(parents=True, exist_ok=True)
+	batch_results_dir.mkdir(parents=True, exist_ok=True)
 
 	job_batches = [
 		(recursive_roots[start : start + batch_size], [])
@@ -263,14 +264,17 @@ def batch_audit(
 
 	for batch_number, (batch_roots, batch_exact_paths) in enumerate(job_batches):
 		manifest = manifest_dir / f'batch-{batch_number:05d}.json'
+		output_file = batch_results_dir / f'batch-{batch_number:05d}.jsonl'
 		manifest.write_text(
 			json.dumps(
 				{
 					'project_root': str(root),
-					'results_root': str(results_root),
 					'audit_date': now.strftime('%Y-%m-%dT%H-%M-%S'),
+					'batch_run_id': run_id,
 					'roots': [str(path) for path in batch_roots],
 					'exact_paths': [str(path) for path in batch_exact_paths],
+					'output_file': str(output_file),
+					'complete_file': str(output_file.with_suffix('.complete')),
 				},
 				indent=2,
 			)
@@ -310,13 +314,28 @@ def batch_audit_worker(manifest: Path) -> None:
 
 
 def run_batch_audit_worker(manifest: Path) -> None:
-	"""Audit each directory in a batch with a shared walk and size scan."""
+	"""Write one JSON Lines result file for this batch."""
 	job = json.loads(manifest.read_text())
+	output_file = Path(job['output_file'])
+	complete_file = Path(job['complete_file'])
+	output_file.parent.mkdir(parents=True, exist_ok=True)
+	complete_file.unlink(missing_ok=True)
+
+	with output_file.open('w', encoding='utf-8') as output:
+		for record in _iter_batch_audit_records(job):
+			output.write(json.dumps(record, default=str))
+			output.write('\n')
+
+	complete_file.write_text('complete\n', encoding='utf-8')
+
+
+def _iter_batch_audit_records(job: dict) -> Iterator[dict]:
+	"""Audit each directory in a batch with a shared walk and size scan."""
 	project_root = Path(job['project_root'])
-	results_root = Path(job['results_root'])
 	roots = [Path(path) for path in job['roots']]
 	exact_paths = [Path(path) for path in job.get('exact_paths', [])]
 	audit_date = job['audit_date']
+	batch_run_id = job['batch_run_id']
 
 	directories: set[Path] = set()
 	children: dict[Path, list[Path]] = {}
@@ -437,14 +456,12 @@ def run_batch_audit_worker(manifest: Path) -> None:
 			source_result['error'] = failed[directory]
 		entry = {
 			'audit_date': audit_date,
+			'batch_run_id': batch_run_id,
 			'source_directory': source_result,
 			'directories': {},
 			'damply_version': damply_version,
 		}
-		relative_path = directory.relative_to(project_root)
-		output_file = results_root / relative_path / 'audit.json'
-		output_file.parent.mkdir(parents=True, exist_ok=True)
-		output_file.write_text(json.dumps(entry, default=str, indent=2))
+		yield entry
 
 	for directory in exact_paths:
 		try:
@@ -461,14 +478,12 @@ def run_batch_audit_worker(manifest: Path) -> None:
 
 		entry = {
 			'audit_date': audit_date,
+			'batch_run_id': batch_run_id,
 			'source_directory': source_result,
 			'directories': {},
 			'damply_version': damply_version,
 		}
-		relative_path = directory.relative_to(project_root)
-		output_file = results_root / relative_path / 'audit.json'
-		output_file.parent.mkdir(parents=True, exist_ok=True)
-		output_file.write_text(json.dumps(entry, default=str, indent=2))
+		yield entry
 
 
 def plan_batch_audit(

@@ -6,6 +6,7 @@ from damply.cli.audit import (
 	batch_audit,
 	batch_audit_worker,
 	collect_audits,
+	collect_batch_audits,
 	full_audit,
 )
 from damply.cli.groups_table import groups_table
@@ -39,4 +40,5 @@ cli.add_command(batch_audit)
 cli.add_command(full_audit)
 cli.add_command(batch_audit_worker)
 cli.add_command(collect_audits)
+cli.add_command(collect_batch_audits)
 cli.add_command(plot)
