@@ -4,6 +4,7 @@ from damply import __version__
 from damply.cli.audit import (
 	audit,
 	batch_audit,
+	batch_audit_aggregate_worker,
 	batch_audit_worker,
 	collect_audits,
 	collect_batch_audits,
@@ -38,6 +39,7 @@ cli.add_command(project)
 cli.add_command(audit)
 cli.add_command(batch_audit)
 cli.add_command(full_audit)
+cli.add_command(batch_audit_aggregate_worker)
 cli.add_command(batch_audit_worker)
 cli.add_command(collect_audits)
 cli.add_command(collect_batch_audits)

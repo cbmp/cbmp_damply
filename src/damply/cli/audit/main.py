@@ -3,12 +3,15 @@ import getpass
 import json
 import os
 import shlex
+import sqlite3
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 
 import click
@@ -239,7 +242,7 @@ def batch_audit(
 		return
 	logger.info(
 		f'Planned {len(recursive_roots)} recursive trees and '
-		f'{len(exact_paths)} exact parent audits'
+		f'{len(exact_paths)} parent aggregations'
 	)
 
 	now = datetime.datetime.now()
@@ -254,15 +257,12 @@ def batch_audit(
 	batch_results_dir.mkdir(parents=True, exist_ok=True)
 
 	job_batches = [
-		(recursive_roots[start : start + batch_size], [])
+		recursive_roots[start : start + batch_size]
 		for start in range(0, len(recursive_roots), batch_size)
 	]
-	job_batches.extend(
-		([], exact_paths[start : start + batch_size])
-		for start in range(0, len(exact_paths), batch_size)
-	)
+	worker_job_ids: list[str] = []
 
-	for batch_number, (batch_roots, batch_exact_paths) in enumerate(job_batches):
+	for batch_number, batch_roots in enumerate(job_batches):
 		manifest = manifest_dir / f'batch-{batch_number:05d}.json'
 		output_file = batch_results_dir / f'batch-{batch_number:05d}.jsonl'
 		manifest.write_text(
@@ -272,7 +272,6 @@ def batch_audit(
 					'audit_date': now.strftime('%Y-%m-%dT%H-%M-%S'),
 					'batch_run_id': run_id,
 					'roots': [str(path) for path in batch_roots],
-					'exact_paths': [str(path) for path in batch_exact_paths],
 					'output_file': str(output_file),
 					'complete_file': str(output_file.with_suffix('.complete')),
 				},
@@ -284,6 +283,7 @@ def batch_audit(
 		job_name = f'batch_audit_{batch_number:05d}'
 		cmd = [
 			'sbatch',
+			'--parsable',
 			'--job-name',
 			job_name,
 			'--output',
@@ -299,8 +299,64 @@ def batch_audit(
 		try:
 			result = subprocess.run(cmd, check=True, capture_output=True, text=True)
 			logger.info(f'Submitted {job_name}: {result.stdout.strip()}')
+			job_id = result.stdout.strip().split(';', 1)[0]
+			if not job_id.isdigit():
+				raise RuntimeError(
+					f'Unexpected sbatch job ID returned for {job_name}: '
+					f'{result.stdout.strip()!r}'
+				)
+			worker_job_ids.append(job_id)
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Failed to submit {job_name}: {e.stderr.strip()}')
+
+	if exact_paths:
+		aggregate_output = batch_results_dir / 'batch-aggregate-parents.jsonl'
+		aggregate_manifest = manifest_dir / 'aggregate-parents.json'
+		aggregate_manifest.write_text(
+			json.dumps(
+				{
+					'project_root': str(root),
+					'batch_results_dir': str(batch_results_dir),
+					'audit_date': now.strftime('%Y-%m-%dT%H-%M-%S'),
+					'batch_run_id': run_id,
+					'exact_paths': [str(path) for path in exact_paths],
+					'output_file': str(aggregate_output),
+					'complete_file': str(aggregate_output.with_suffix('.complete')),
+				},
+				indent=2,
+			)
+		)
+		wait_for_job_slot(max_jobs)
+		aggregate_cmd = [
+			'sbatch',
+			'--parsable',
+			'--job-name',
+			'batch_audit_aggregate',
+			'--output',
+			str(log_dir / 'batch_audit_aggregate_%j.out'),
+			'--time',
+			job_time,
+			'--mem',
+			job_memory,
+		]
+		if worker_job_ids:
+			aggregate_cmd.extend(
+				['--dependency', f'afterany:{":".join(worker_job_ids)}']
+			)
+		aggregate_cmd.extend(
+			[
+				'--wrap',
+				'DAMPLY_LOG_LEVEL=DEBUG damply _batch-audit-aggregate-worker '
+				f'{shlex.quote(str(aggregate_manifest))}',
+			]
+		)
+		try:
+			result = subprocess.run(
+				aggregate_cmd, check=True, capture_output=True, text=True
+			)
+			logger.info(f'Submitted parent aggregation: {result.stdout.strip()}')
+		except subprocess.CalledProcessError as e:
+			logger.error(f'Failed to submit parent aggregation: {e.stderr.strip()}')
 
 
 @click.command('_batch-audit-worker', hidden=True)
@@ -311,6 +367,16 @@ def batch_audit(
 def batch_audit_worker(manifest: Path) -> None:
 	"""Run one batch-audit job from its manifest."""
 	run_batch_audit_worker(manifest)
+
+
+@click.command('_batch-audit-aggregate-worker', hidden=True)
+@click.argument(
+	'manifest',
+	type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+def batch_audit_aggregate_worker(manifest: Path) -> None:
+	"""Aggregate split-parent records after recursive workers finish."""
+	run_batch_audit_aggregate_worker(manifest)
 
 
 def run_batch_audit_worker(manifest: Path) -> None:
@@ -333,7 +399,6 @@ def _iter_batch_audit_records(job: dict) -> Iterator[dict]:
 	"""Audit each directory in a batch with a shared walk and size scan."""
 	project_root = Path(job['project_root'])
 	roots = [Path(path) for path in job['roots']]
-	exact_paths = [Path(path) for path in job.get('exact_paths', [])]
 	audit_date = job['audit_date']
 	batch_run_id = job['batch_run_id']
 
@@ -463,27 +528,205 @@ def _iter_batch_audit_records(job: dict) -> Iterator[dict]:
 		}
 		yield entry
 
-	for directory in exact_paths:
-		try:
-			audit_obj = DirectoryAudit.from_path(directory)
-			audit_obj.compute_details(show_progress=False, force=True)
-			source_result = {'status': 'ok', 'data': audit_obj.to_dict()}
-		except Exception as e:
-			logger.exception(f'Unable to compute exact metadata for {directory}')
-			source_result = {
-				'status': 'error',
-				'error': f'{type(e).__name__}: {e}',
-				'data': {'path': str(directory)},
-			}
 
-		entry = {
-			'audit_date': audit_date,
-			'batch_run_id': batch_run_id,
-			'source_directory': source_result,
-			'directories': {},
-			'damply_version': damply_version,
+def run_batch_audit_aggregate_worker(manifest: Path) -> None:
+	"""Aggregate parent metrics from child records without recursively rescanning."""
+	job = json.loads(manifest.read_text())
+	project_root = Path(job['project_root'])
+	results_dir = Path(job['batch_results_dir'])
+	output_file = Path(job['output_file'])
+	complete_file = Path(job['complete_file'])
+	batch_run_id = job['batch_run_id']
+	audit_date = job['audit_date']
+	audit_dir = project_root / 'admin' / 'audit'
+
+	output_file.parent.mkdir(parents=True, exist_ok=True)
+	complete_file.unlink(missing_ok=True)
+	exact_paths = sorted(
+		(Path(path) for path in job['exact_paths']),
+		key=lambda path: len(path.parts),
+		reverse=True,
+	)
+
+	with tempfile.TemporaryDirectory(
+		prefix='damply-parent-index-', dir=results_dir
+	) as temp_dir:
+		database = Path(temp_dir) / 'records.sqlite'
+		with closing(sqlite3.connect(database)) as connection, connection:
+			connection.execute(
+				'CREATE TABLE records (path TEXT PRIMARY KEY, entry TEXT NOT NULL)'
+			)
+			_index_batch_records(connection, results_dir, batch_run_id)
+
+			with output_file.open('w', encoding='utf-8') as output:
+				for directory in exact_paths:
+					record = _aggregate_parent_record(
+						directory,
+						project_root,
+						audit_dir,
+						connection,
+						batch_run_id,
+						audit_date,
+					)
+					output.write(json.dumps(record, default=str))
+					output.write('\n')
+					connection.execute(
+						'INSERT OR REPLACE INTO records (path, entry) VALUES (?, ?)',
+						(str(directory), json.dumps(record, default=str)),
+					)
+			connection.commit()
+
+	complete_file.write_text('complete\n', encoding='utf-8')
+
+
+def _index_batch_records(
+	connection: sqlite3.Connection, results_dir: Path, batch_run_id: str
+) -> None:
+	for batch_file in sorted(results_dir.glob('batch-*.jsonl')):
+		if batch_file.name == 'batch-aggregate-parents.jsonl':
+			continue
+		if not batch_file.with_suffix('.complete').is_file():
+			logger.warning(f'Batch output is incomplete: {batch_file}')
+		with batch_file.open(encoding='utf-8') as batch:
+			for line_number, line in enumerate(batch, start=1):
+				try:
+					entry = json.loads(line)
+					if entry.get('batch_run_id') != batch_run_id:
+						continue
+					data = entry.get('source_directory', {}).get('data', {})
+					path = data.get('path')
+					if path:
+						connection.execute(
+							'INSERT OR REPLACE INTO records (path, entry) VALUES (?, ?)',
+							(path, json.dumps(entry)),
+						)
+				except (json.JSONDecodeError, TypeError, ValueError) as e:
+					logger.warning(
+						f'Unable to index {batch_file}:{line_number}: {e}'
+					)
+		connection.commit()
+
+
+def _aggregate_parent_record(
+	directory: Path,
+	project_root: Path,
+	audit_dir: Path,
+	connection: sqlite3.Connection,
+	batch_run_id: str,
+	audit_date: str,
+) -> dict:
+	errors: list[str] = []
+	error_count = 0
+	file_count = 0
+	file_types: set[str] = set()
+	size_bytes = 0
+
+	def record_error(message: str) -> None:
+		nonlocal error_count
+		error_count += 1
+		if len(errors) < 20:
+			errors.append(message)
+
+	def add_child_result(child: Path) -> None:
+		nonlocal file_count, size_bytes
+		row = connection.execute(
+			'SELECT entry FROM records WHERE path = ?', (str(child),)
+		).fetchone()
+		if row is None:
+			record_error(f'No child audit result found for {child}')
+			return
+		try:
+			child_entry = json.loads(row[0])
+			if child_entry.get('batch_run_id') != batch_run_id:
+				raise ValueError('Child result belongs to another batch-audit run.')
+			child_source = child_entry['source_directory']
+			child_data = child_source['data']
+			if Path(child_data['path']) != child:
+				raise ValueError('Child result path does not match the directory.')
+		except (KeyError, TypeError, ValueError) as e:
+			record_error(f'Invalid child result for {child}: {e}')
+			return
+
+		if child_source.get('status') != 'ok':
+			record_error(f'Child audit failed for {child}')
+		try:
+			size_bytes += int(ByteSize(child_data['size']))
+		except (KeyError, TypeError, ValueError) as e:
+			record_error(f'Child size unavailable for {child}: {e}')
+		try:
+			file_count += int(child_data['file_count'])
+		except (KeyError, TypeError, ValueError) as e:
+			record_error(f'Child file count unavailable for {child}: {e}')
+		file_types.update(child_data.get('file_types') or [])
+
+	try:
+		size_bytes += _allocated_bytes(directory.stat())
+		with os.scandir(directory) as entries:
+			for entry in entries:
+				entry_path = Path(entry.path)
+				if entry_path == audit_dir:
+					continue
+				try:
+					if entry.is_dir(follow_symlinks=False):
+						add_child_result(entry_path)
+						continue
+					if not entry.is_file(follow_symlinks=False):
+						continue
+					file_stat = entry.stat(follow_symlinks=False)
+					if not stat.S_ISREG(file_stat.st_mode):
+						continue
+
+					file_count += 1
+					size_bytes += _allocated_bytes(file_stat)
+					suffixes = Path(entry.name).suffixes
+					if (
+						not entry.name.startswith('.')
+						and suffixes
+						and len(suffixes) <= 3
+					):
+						valid_suffixes = [
+							suffix
+							for suffix in suffixes
+							if not any(character.isdigit() for character in suffix)
+						]
+						file_types.add(''.join(valid_suffixes))
+				except OSError as e:
+					record_error(f'Unable to inspect {entry_path}: {e}')
+	except OSError as e:
+		record_error(f'Unable to scan parent directory: {e}')
+
+	try:
+		audit_obj = DirectoryAudit.from_path(directory)
+		audit_obj.size = ByteSize(size_bytes)
+		audit_obj.file_count = file_count
+		audit_obj.file_types = sorted(file_types)
+		audit_obj.last_computed = audit_date
+		data = audit_obj.to_dict()
+	except Exception as e:
+		logger.exception(f'Unable to read parent metadata for {directory}')
+		data = {
+			'path': str(directory),
+			'size': str(ByteSize(size_bytes)),
+			'file_count': file_count,
+			'file_types': sorted(file_types),
 		}
-		yield entry
+		record_error(f'Parent metadata unavailable: {e}')
+	data['size_is_estimated'] = True
+
+	source_result = {'status': 'error' if error_count else 'ok', 'data': data}
+	if error_count:
+		error_message = '; '.join(errors)
+		if error_count > len(errors):
+			error_message += f'; {error_count - len(errors)} additional errors'
+		source_result['error'] = error_message
+		logger.warning(f'Parent aggregation incomplete for {directory}')
+	return {
+		'audit_date': audit_date,
+		'batch_run_id': batch_run_id,
+		'source_directory': source_result,
+		'directories': {},
+		'damply_version': damply_version,
+	}
 
 
 def plan_batch_audit(
