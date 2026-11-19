@@ -28,6 +28,14 @@ from .utils import (
 )
 
 
+def _allocated_bytes(file_stat: os.stat_result) -> int:
+	"""Return allocated bytes, matching GNU du's block-based size accounting."""
+	blocks = getattr(file_stat, 'st_blocks', None)
+	if blocks is None:
+		return file_stat.st_size
+	return blocks * 512
+
+
 @click.option(
 	'--force-compute-details',
 	'-f',
